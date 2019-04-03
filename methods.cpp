@@ -13,9 +13,9 @@ void createMatrix (int n, int r, int np, double *a, double *b) {
         b[i] = 0;
 
         for (int j = 0; j < n; ++j) {
-            a[i*n + j] = max(i*np + r, j);
+            // a[i*n + j] = max(i*np + r, j);
             // a[i*n + j] = 1.0/(i*np + r + j);
-            // a[i*n + j] = abs(i*np + r - j);
+            a[i*n + j] = abs(i*np + r - j);
             b[i] += j%2 ? 0 : a[i*n + j];
         }
     }
@@ -63,13 +63,43 @@ void writeMatrix (int n, int r, int np, double *a, double *b) {
 
 // Solve system of linear equations (Gauss–Jordan elimination); array b holds the result vector
 void solveMatrix (int n, int r, int np, double* a, double* b) {
-    // Numer of rows; each process has matrix shape N x n
+    // Number of rows; each process has matrix shape nLocal x n
     int nLocal = n/np + (r + 1 <= n%np ? 1 : 0);
+    double* mainElement = new double[2*np];
 
+    // Global iteration
     for (int iGlobal = 0; iGlobal < n; ++iGlobal) {
-        // Get main element
-        for (int ii = i; ii < N; ++ii) {
+        int firstRow = iGlobal%np <= r ? iGlobal/np : iGlobal/np + 1;
+        double tmp = fabs(firstRow >= nLocal ? 0 : a[firstRow*n + iGlobal]);
+        int tmpRow = firstRow >= nLocal ? -1 : firstRow;
+        int tmpRank = rank;
 
+        // Get main element for process
+        for (int iLocal = firstRow + 1; iLocal < nLocal; ++iLocal) {
+            if (fabs(a[iLocal*n + iGlobal]) > tmp) {
+                tmp = fabs(a[iLocal*n + iGlobal]);
+                tmpRow = iLocal;
+            }
+        }
+
+        double mainElementTmp[2] = {tmp, (double) tmpRow};
+        MPI_Gather(mainElementTmp, 2, MPI_DOUBLE, mainElement, 2, MPI_DOUBLE, 0, MPI_COMM_WORLD);
+
+        // Get main element for iteration
+        if (r == 0) {
+            for (int i = 0; i < 2*np; i+=2) {
+                if (fabs(mainElement[i] > tmp)) {
+                    tmp = fabs(mainElement[i]);
+                    tmpRow = mainElement[i + 1];
+                    tmpRank = i;
+                }
+            }
+
+            if (tmpRank > 0) {
+
+            }
+
+            printf("\n%f  %f\n", mainElement[0], mainElement[0]);
         }
     }
 }
