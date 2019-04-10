@@ -18,7 +18,9 @@ int main (int argc, char* argv[]) {
 
     createMatrix(n, r, np, a, b);
     writeMatrix(n, r, np, a, b);
+
     solveMatrix(n, r, np, a, b);
+    writeMatrix(n, r, np, a, b);
 
     MPI_Finalize();
     return 0;
