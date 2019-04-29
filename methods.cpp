@@ -1,17 +1,15 @@
 #include <mpi.h>
+#include <string.h>
+#include <time.h>
 #include <stdio.h>
 #include <algorithm>
+#include <math.h>
+#include "methods.h"
 
 using namespace std;
 
-void readMatrix(int n, int r, int np, double *a, double *b, char* input);
-void createMatrix(int n, int r, int np, double *a, double *b);
-void writeMatrix(int n, int r, int np, double *a, double *b);
-void solveMatrix(int n, int r, int np, double *a, double *b);
-double discrepancy(int n, int r, int np, double *a, double *b, double* answer);
-
-// Read matrix from file
-void readMatrix(int n, int r, int np, double *a, double *b, char* input) {
+// Read matrix from file(two copies)
+void readMatrix(int n, int r, int np, double *a, double *b, double *a1, double *b1, char* input) {
     MPI_Status st;
     FILE *in = fopen(input, "r");
     double* buf = new double[n + 1];
@@ -25,6 +23,9 @@ void readMatrix(int n, int r, int np, double *a, double *b, char* input) {
             if (r == iGlobal%np) {
                 memcpy(a + (iGlobal/np)*n, buf, n*sizeof(double));
                 b[iGlobal/np] = buf[n];
+
+                memcpy(a1 + (iGlobal/np)*n, buf, n*sizeof(double));
+                b1[iGlobal/np] = buf[n];
             } else {
                 MPI_Send(buf, n + 1, MPI_DOUBLE, iGlobal%np, 0, MPI_COMM_WORLD);
             }
@@ -32,6 +33,9 @@ void readMatrix(int n, int r, int np, double *a, double *b, char* input) {
             MPI_Recv(buf, n + 1, MPI_DOUBLE, 0, MPI_ANY_TAG, MPI_COMM_WORLD, &st);
             memcpy(a + (iGlobal/np)*n, buf, n*sizeof(double));
             b[iGlobal/np] = buf[n];
+
+            memcpy(a1 + (iGlobal/np)*n, buf, n*sizeof(double));
+            b1[iGlobal/np] = buf[n];
         }
     }
 
@@ -41,8 +45,8 @@ void readMatrix(int n, int r, int np, double *a, double *b, char* input) {
     return;
 }
 
-// Generate matrix shape n x n for np processes
-void createMatrix(int n, int r, int np, double *a, double *b) {
+// Generate matrix shape n x n for np processes(two copies)
+void createMatrix(int n, int r, int np, double *a, double *b, double *a1, double *b1) {
     int nLocal = n/np + (r + 1 <= n%np ? 1 : 0);
 
     for (int i = 0; i < nLocal; ++i) {
@@ -52,6 +56,16 @@ void createMatrix(int n, int r, int np, double *a, double *b) {
             a[i*n + j] = max(i*np + r, j);
             // a[i*n + j] = abs(i*np + r - j);
             b[i] += j%2 ? 0 : a[i*n + j];
+        }
+    }
+
+    for (int i = 0; i < nLocal; ++i) {
+        b1[i] = 0;
+
+        for (int j = 0; j < n; ++j) {
+            a1[i*n + j] = max(i*np + r, j);
+            // a1[i*n + j] = abs(i*np + r - j);
+            b1[i] += j%2 ? 0 : a1[i*n + j];
         }
     }
 
@@ -194,13 +208,14 @@ void solveMatrix(int n, int r, int np, double* a, double* b) {
     double* buf = new double[n + 1];
     double* buf1 = new double[n + 1];
 
+    double time;
+
     // Global iteration
     for (int iGlobal = 0; iGlobal < n; ++iGlobal) {
         int firstRow = iGlobal%np <= r ? iGlobal/np : iGlobal/np + 1;
         double tmp = fabs(firstRow >= nLocal ? 0 : a[firstRow*n + iGlobal]);
         int tmpRow = firstRow;
         int tmpRank = r;
-        int permutationTmp = 0;
 
         // Get main element for process
         for (int iLocal = firstRow + 1; iLocal < nLocal; ++iLocal) {
@@ -254,6 +269,10 @@ void solveMatrix(int n, int r, int np, double* a, double* b) {
             b[iGlobal/np] = buf[n - iGlobal];
         }
 
+        // time = MPI_Wtime();
+        //
+        // int count = 0;
+
         // Subtract main row from all others
         if (r == iGlobal%np) {
             for (int iLocal = 0; iLocal < iGlobal/np; ++iLocal) {
@@ -262,6 +281,7 @@ void solveMatrix(int n, int r, int np, double* a, double* b) {
 
                 for (int j = iGlobal + 1; j < n; ++j) {
                     a[iLocal*n + j] = a[iLocal*n + j] - tmp*buf[j - iGlobal];
+                    // ++count;
                 }
             }
             for (int iLocal = iGlobal/np + 1; iLocal < nLocal; ++iLocal) {
@@ -270,6 +290,7 @@ void solveMatrix(int n, int r, int np, double* a, double* b) {
 
                 for (int j = iGlobal + 1; j < n; ++j) {
                     a[iLocal*n + j] = a[iLocal*n + j] - tmp*buf[j - iGlobal];
+                    // ++count;
                 }
             }
             for (int j = iGlobal + 1; j < n; ++j) {
@@ -284,9 +305,16 @@ void solveMatrix(int n, int r, int np, double* a, double* b) {
 
                 for (int j = iGlobal + 1; j < n; ++j) {
                     a[iLocal*n + j] = a[iLocal*n + j] - tmp*buf[j - iGlobal];
+                    // ++count;
                 }
             }
         }
+
+        // time = MPI_Wtime() - time;
+        // if (iGlobal < 10) {
+        //     printf("\n iterations for process №%d = %d", r, count);
+        //     //printf("\n time for process №%d = %f", r, time);
+        // }
     }
 
     delete[]mainElement;

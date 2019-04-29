@@ -3,7 +3,7 @@
 #include <stdlib.h>
 #include <time.h>
 #include <math.h>
-#include "methods.cpp"
+#include "methods.h"
 
 int main (int argc, char* argv[]) {
     MPI_Init (&argc, &argv);
@@ -15,9 +15,14 @@ int main (int argc, char* argv[]) {
     MPI_Comm_rank (MPI_COMM_WORLD, &r);
     MPI_Comm_size (MPI_COMM_WORLD, &np);
 
+    // Before algorithm
     double* a = new double[(n/np + 1)*n];
     double* b = new double[n/np + 1];
+
+    // After algorithm
+    double* a1 = new double[(n/np + 1)*n];
     double* b1 = new double[n/np + 1];
+
     double res;
     double time;
     char* input = NULL;
@@ -31,22 +36,21 @@ int main (int argc, char* argv[]) {
     }
 
     if (argc == 3) {
-        readMatrix(n, r, np, a, b, input);
+        readMatrix(n, r, np, a, b, a1, b1, input);
     } else {
-        createMatrix(n, r, np, a, b);
+        createMatrix(n, r, np, a, b, a1, b1);
     }
-    writeMatrix(n, r, np, a, b);
+    //writeMatrix(n, r, np, a, b);
 
     time = MPI_Wtime();
     solveMatrix(n, r, np, a, b);
     time = MPI_Wtime() - time;
 
-    if (argc == 3) {
-        readMatrix(n, r, np, a, b1, input);
-    } else {
-        createMatrix(n, r, np, a, b1);
+    if (n <= 10) {
+        writeMatrix(n, r, np, a, b);      
     }
-    res = discrepancy(n, r, np, a, b1, b);
+
+    res = discrepancy(n, r, np, a1, b1, b);
 
     if (r == 0) {
         printf("\n res=%e \n", res);
@@ -55,6 +59,7 @@ int main (int argc, char* argv[]) {
 
     delete[]a;
     delete[]b;
+    delete[]a1;
     delete[]b1;
 
     MPI_Finalize();
